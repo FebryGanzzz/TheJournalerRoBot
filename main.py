@@ -153,9 +153,10 @@ def create_web_app(webapp_dir: Path) -> web.Application:
 
 
 def build_bot_application(token: str):
-    from telegram import MenuButtonWebApp, WebAppInfo
+    from telegram import Bot, MenuButtonWebApp, WebAppInfo
     from telegram.constants import ParseMode
     from telegram.ext import Application, Defaults
+    from httpx import AsyncHTTPTransport
     import handlers
     from config import load_settings
 
@@ -170,11 +171,17 @@ def build_bot_application(token: str):
         except Exception:
             log.warning("Gagal mengeset chat menu button.")
 
+    # Longer timeouts for Railway's potentially slow network
+    transport = AsyncHTTPTransport(retries=3)
     app = (
         Application.builder()
         .token(token)
         .defaults(Defaults(parse_mode=ParseMode.HTML))
         .post_init(post_init)
+        .read_timeout(30)
+        .write_timeout(30)
+        .connect_timeout(30)
+        .pool_timeout(30)
         .build()
     )
     for handler in handlers.all_handlers():
@@ -216,18 +223,27 @@ async def _run_forever() -> None:
     await site.start()
     log.info("HTTP server aktif di port %s", settings.port)
 
-    # Start Telegram bot (if token provided)
+    # Start Telegram bot (if token provided) — with retry
+    bot_app = None
     if settings.bot_token:
-        try:
-            bot_app = build_bot_application(settings.bot_token)
-            await bot_app.initialize()
-            await bot_app.start()
-            await bot_app.updater.start_polling(
-                allowed_updates=["message", "callback_query"], poll_interval=1.0
-            )
-            log.info("Telegram bot aktif — siap menerima pesan.")
-        except Exception as e:
-            log.error("Telegram bot gagal start: %s — web server tetap jalan.", e)
+        for attempt in range(1, 4):
+            try:
+                log.info("Mencoba start Telegram bot (attempt %d/3)...", attempt)
+                bot_app = build_bot_application(settings.bot_token)
+                await bot_app.initialize()
+                await bot_app.start()
+                await bot_app.updater.start_polling(
+                    allowed_updates=["message", "callback_query"], poll_interval=1.0
+                )
+                log.info("Telegram bot aktif — siap menerima pesan.")
+                break
+            except Exception as e:
+                log.warning("Attempt %d gagal: %s", attempt, e)
+                if attempt < 3:
+                    import asyncio as _aio
+                    await _aio.sleep(5 * attempt)
+                else:
+                    log.error("Telegram bot gagal start setelah 3 attempts — web server tetap jalan.")
     else:
         log.warning("BOT_TOKEN kosong — Telegram bot TIDAK aktif. Web server saja.")
 
@@ -239,12 +255,13 @@ async def _run_forever() -> None:
         pass
     finally:
         log.info("Mematikan...")
-        try:
-            await bot_app.updater.stop()
-            await bot_app.stop()
-            await bot_app.shutdown()
-        except Exception:
-            pass
+        if bot_app:
+            try:
+                await bot_app.updater.stop()
+                await bot_app.stop()
+                await bot_app.shutdown()
+            except Exception:
+                pass
         await runner.cleanup()
         log.info("Selesai.")
 
