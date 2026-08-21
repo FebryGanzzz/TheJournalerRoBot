@@ -133,8 +133,17 @@ def _list_all_trades(conn) -> list:
     return [_row_to_trade(r) for r in cur.fetchall()]
 
 
+async def serve_index(request: web.Request) -> web.Response:
+    """Serve index.html at root."""
+    index_path = Path(__file__).parent / "webapp" / "index.html"
+    if index_path.exists():
+        return web.FileResponse(index_path)
+    return web.Response(text="Trading Journal Bot", content_type="text/plain")
+
+
 def create_web_app(webapp_dir: Path) -> web.Application:
     app = web.Application()
+    # API routes FIRST (higher priority)
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/stats.json", api_stats)
     app.router.add_get("/api/settings", api_settings)
@@ -142,8 +151,13 @@ def create_web_app(webapp_dir: Path) -> web.Application:
     app.router.add_get("/api/trades", api_trades)
     app.router.add_get("/trades.json", api_trades)
     app.router.add_get("/health", health)
+    # Root → serve index.html explicitly
+    app.router.add_get("/", serve_index)
+    # Static files (CSS, JS, images)
     if webapp_dir.exists():
-        app.router.add_static("/", path=str(webapp_dir), show_index=True)
+        app.router.add_static("/static", path=str(webapp_dir), show_index=False)
+        # Catch-all for other webapp paths (favicon, etc.)
+        app.router.add_static("/webapp", path=str(webapp_dir), show_index=False)
     return app
 
 
@@ -204,6 +218,7 @@ async def _run_forever() -> None:
     log.info("Port: %s", settings.port)
     log.info("Database: %s", "PostgreSQL" if db.USE_POSTGRES else "SQLite")
     log.info("Timezone: %s", settings.timezone)
+    log.info("WebApp URL: %s", settings.webapp_url or "(BELUM DISET — generate domain di Railway Settings → Networking)")
     log.info("=" * 50)
 
     # Init database

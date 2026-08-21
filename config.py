@@ -64,9 +64,18 @@ def load_settings() -> Settings:
     port = int(os.getenv("PORT", "8080"))
 
     # Auto-detect WebApp URL from Railway domain
+    # Railway provides: RAILWAY_PUBLIC_DOMAIN (e.g. "xxx.up.railway.app")
     domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    # Also check common alternatives
+    if not domain:
+        domain = os.getenv("RAILWAY_STATIC_URL", "").strip()
+    if not domain:
+        domain = os.getenv("APP_URL", "").strip().replace("https://", "").replace("http://", "")
     default_url = f"https://{domain}" if domain else ""
-    webapp_url = os.getenv("WEBAPP_URL", default_url).strip()
+    # WEBAPP_URL explicitly set → use it; otherwise fallback to auto-detected domain
+    webapp_url_env = os.getenv("WEBAPP_URL", "").strip()
+    webapp_url = webapp_url_env if webapp_url_env else default_url
+    log.info("WebApp URL: %s (domain=%s)", webapp_url or "(kosong)", domain or "(kosong)")
 
     return Settings(
         bot_token=os.getenv("BOT_TOKEN", "").strip(),

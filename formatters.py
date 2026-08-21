@@ -177,6 +177,7 @@ def fmt_report_summary(agg: dict, period_label: str, settings: Settings, recent:
 
 
 def fmt_settings(settings: Settings) -> str:
+    webapp_status = settings.webapp_url if settings.webapp_url else "❌ BELUM DISET (set WEBAPP_URL atau generate domain di Railway)"
     return "\n".join(
         [
             "⚙️ <b>Pengaturan</b>",
@@ -187,5 +188,6 @@ def fmt_settings(settings: Settings) -> str:
             f"· Batas daily R   : {settings.daily_loss_r:.1f}R",
             f"· Batas daily %   : {settings.daily_loss_percent:.1f}% saldo",
             f"· Zona waktu      : {settings.timezone}",
+            f"· WebApp URL      : {webapp_status}",
         ]
     )
