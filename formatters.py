@@ -64,7 +64,7 @@ def fmt_trade_card(t: Trade, settings: Settings) -> str:
         f"    Exit  : {fmt_number(t.exit, calc.decimal_places(t.pair))}",
         f"    Lot   : {t.lot:g}",
         f"    Stop  : {fmt_opt(t.stop_loss, lambda v: fmt_number(v, calc.decimal_places(t.pair)))}",
-        f"    Pips  : {calc.price_pips(t.pair, t.entry, t.exit) * (1 if (t.exit - t.entry) * (1 if t.direction=='LONG' else -1) > 0 else -1):+g}",
+        f"    Pips  : {pip_flow(t):+.1f} pips",
         f"    P&L   : {fmt_money(p, settings)} ({fmt_opt(r, lambda v: f'{v:+.1f}R')})",
         f"    Waktu : {local_str(t.open_time, settings)}",
     ]

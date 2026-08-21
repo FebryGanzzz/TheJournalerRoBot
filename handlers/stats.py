@@ -54,4 +54,4 @@ async def cmd_stats(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 
 def handlers() -> list[object]:
-    return [CommandHandler("stats", cmd_stats)]
+    return [CommandHandler(["stats", "stat"], cmd_stats)]

@@ -131,10 +131,10 @@ async def panel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         agg = calc.aggregate(trades, s)
         caption = f"📈 Kurva Ekuitas ({len(trades)} trade)\nP&L: {formatters.fmt_money(agg['net_pnl'], s)}"
-        await q.edit_message_caption(
+        await q.message.reply_photo(
+            photo=BytesIO(png),
             caption=caption,
             parse_mode=ParseMode.HTML,
-            photo=BytesIO(png),
         )
 
     elif action == "export":

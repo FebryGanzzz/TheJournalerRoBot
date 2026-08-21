@@ -138,4 +138,4 @@ async def cmd_streak(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 
 
 def handlers() -> list[object]:
-    return [CommandHandler("streak", cmd_streak)]
+    return [CommandHandler(["streak", "streaks"], cmd_streak)]

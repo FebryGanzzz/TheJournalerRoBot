@@ -121,4 +121,4 @@ async def cmd_session(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 
 
 def handlers() -> list[object]:
-    return [CommandHandler("session", cmd_session)]
+    return [CommandHandler(["session", "sessions"], cmd_session)]

@@ -109,9 +109,9 @@ async def cmd_help(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• <code>/rr entry stop target</code> — kalkulator Risk/Reward\n"
         "• <code>/settings</code> — lihat & ubah pengaturan\n\n"
         "<b>Fitur baru</b>\n"
-        "• <code>/streak</b> — streak menang/kalah & konsistensi\n"
-        "• <code>/session</b> — performa per sesi trading (Asian/London/NY)\n"
-        "• <code>/summary</b> — ringkasan hari ini dengan insight\n\n"
+        "• <code>/streak</code> — streak menang/kalah & konsistensi\n"
+        "• <code>/session</code> — performa per sesi trading (Asian/London/NY)\n"
+        "• <code>/summary</code> — ringkasan hari ini dengan insight\n\n"
         "<i>Setiap user punya data sendiri-sendiri. Trade bisa ditambah tags:</i>\n"
         "<code>/trade EURUSD LONG entry=.. exit=.. lot=.. tags=breakout,scalping</code>"
     )
@@ -227,6 +227,7 @@ async def cmd_trade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         lot=lot,
         stop_loss=sl,
         notes=notes,
+        tags=tags,
     )
     with db.get_conn() as conn:
         tid = db.insert_trade(conn, trade)
@@ -444,20 +445,32 @@ async def cmd_list(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     s = build_settings(uid)
     arg = (context.args[0] if context.args else None)
     with db.get_conn() as conn:
-        if arg and arg.upper() in _PERIOD_ALIASES:
-            period = _PERIOD_ALIASES[arg.upper()]
+        if arg and arg.lower() in _PERIOD_ALIASES:
+            period = _PERIOD_ALIASES[arg.lower()]
             start, end = calc.period_to_window(period, datetime.now(timezone.utc), get_tz(s))
             trades = db.list_trades(conn, uid, start=start, end=end)
             label = {"today": "Hari Ini", "week": "Minggu Ini", "month": "Bulan Ini"}[period]
+        elif arg and arg.startswith("#"):
+            tag = arg[1:].strip().lower()
+            trades = db.list_trades_by_tag(conn, uid, tag=tag)
+            label = f"Tag #{tag}"
         elif arg:
             pair = calc.normalize_pair(arg)
-            if pair is None:
-                await update.effective_message.reply_text(
-                    f"❌ Filter tidak dikenal: <code>{arg}</code>."
-                )
-                return
-            trades = db.list_trades(conn, uid, pair=pair)
-            label = pair
+            if pair is not None:
+                trades = db.list_trades(conn, uid, pair=pair)
+                label = pair
+            else:
+                # Try tag search as fallback
+                tag_trades = db.list_trades_by_tag(conn, uid, tag=arg.strip().lower())
+                if tag_trades:
+                    trades = tag_trades
+                    label = f"Tag #{arg.strip().lower()}"
+                else:
+                    await update.effective_message.reply_text(
+                        f"❌ Filter tidak dikenal: <code>{arg}</code>.\n"
+                        "Gunakan periode (<code>today</code>/<code>week</code>/<code>month</code>), pair (<code>EURUSD</code>), atau tag (<code>#scalp</code>)."
+                    )
+                    return
         else:
             trades = db.list_trades(conn, uid)
             label = "Semua"
@@ -547,7 +560,8 @@ def _edit_kb() -> InlineKeyboardMarkup:
              InlineKeyboardButton("Lot", callback_data="edit-pick:lot")],
             [InlineKeyboardButton("Stop Loss", callback_data="edit-pick:stop_loss"),
              InlineKeyboardButton("Catatan", callback_data="edit-pick:notes")],
-            [InlineKeyboardButton("🔁 Selesai", callback_data="edit-pick:cancel")],
+            [InlineKeyboardButton("Tags", callback_data="edit-pick:tags"),
+             InlineKeyboardButton("🔁 Selesai", callback_data="edit-pick:cancel")],
         ]
     )
 
@@ -788,7 +802,7 @@ def handlers() -> list[object]:
         CallbackQueryHandler(edit_pick_cb, pattern=r"^edit-pick:"),
         CallbackQueryHandler(edit_save_cb, pattern=r"^edit-save:"),
         MessageHandler(filters.TEXT & ~filters.COMMAND, edit_value_msg),
-        CommandHandler("batal", edit_cancel_cmd),
+        CommandHandler(["batal", "cancel"], edit_cancel_cmd),
         CommandHandler("list", cmd_list),
         CommandHandler("detail", cmd_detail),
         CommandHandler("delete", cmd_delete),

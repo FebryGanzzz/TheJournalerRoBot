@@ -228,18 +228,19 @@ def _to_dt(raw: str) -> datetime:
 
 
 def _row_to_trade(row) -> Trade:
+    d = dict(row) if not isinstance(row, dict) else row
     return Trade(
-        id=row["id"],
-        user_id=row["user_id"],
-        pair=row["pair"],
-        direction=row["direction"],
-        entry=row["entry"],
-        exit=row["exit"],
-        lot=row["lot"],
-        stop_loss=row["stop_loss"],
-        notes=row["notes"] or "",
-        tags=row.get("tags", "") or "",
-        open_time=_to_dt(row["open_time"]),
+        id=d["id"],
+        user_id=d["user_id"],
+        pair=d["pair"],
+        direction=d["direction"],
+        entry=d["entry"],
+        exit=d["exit"],
+        lot=d["lot"],
+        stop_loss=d["stop_loss"],
+        notes=d.get("notes") or "",
+        tags=d.get("tags") or "",
+        open_time=_to_dt(d["open_time"]),
     )
 
 
