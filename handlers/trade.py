@@ -48,6 +48,19 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         return
     uid = extract_user_id(update)
     s = build_settings(uid)
+
+    # Try to set menu button on first interaction
+    if s.webapp_url and context.bot:
+        try:
+            from telegram import MenuButtonWebApp, WebAppInfo
+            btn = MenuButtonWebApp(text="📒 Journal", web_app=WebAppInfo(url=s.webapp_url))
+            await context.bot.set_chat_menu_button(
+                chat_id=update.effective_chat.id, menu_button=btn
+            )
+        except Exception:
+            pass  # non-fatal
+
+    webapp_line = "\n🌐 <b>WebApp:</b> /webapp\n" if s.webapp_url else ""
     await update.effective_message.reply_text(
         "👋 <b>Selamat datang di Trading Journal!</b>\n\n"
         "Bot untuk mencatat & menganalisis trading Forex Anda.\n\n"
@@ -62,7 +75,12 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• <code>/chart</code> — kurva ekuitas\n"
         "• <code>/export</code> — unduh CSV\n\n"
         "⚙️ <b>Pengaturan:</b>\n"
-        "• <code>/settings</code> dan <code>/size</code>\n\n"
+        "• <code>/settings</code> dan <code>/size</code>\n"
+        "• <code>/panel</code> — panel tombol sentuh\n"
+        "• <code>/streak</code> — win/loss streak\n"
+        "• <code>/session</code> — performa per sesi\n"
+        "• <code>/rr</code> — kalkulator R:R\n"
+        "• <code>/summary</code> — ringkasan hari ini\n\n"
         "Ketik <code>/help</code> untuk bantuan lengkap."
     )
 

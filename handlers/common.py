@@ -137,6 +137,7 @@ async def check_allowed(update: Update, context: ContextTypes.DEFAULT_TYPE) -> b
         return False
     base = load_settings()
     if base.allowed_user_ids and user.id not in base.allowed_user_ids:
+        log.warning("User %s (%s) TIDAK diizinkan", user.id, user.username)
         try:
             await update.effective_message.reply_text(
                 "⛔ Anda tidak diizinkan memakai bot ini."
@@ -156,3 +157,8 @@ def extract_user_id(update: Update) -> int:
 async def notify_errors(update: Update, context: ContextTypes.DEFAULT_TYPE | None = None) -> None:
     """Log error dari update tanpa crash handler."""
     log.error("Terjadi kesalahan: %s", context.error, exc_info=context.error)
+
+
+async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Global error handler — log semua error."""
+    log.error("Exception while handling update: %s", context.error, exc_info=context.error)

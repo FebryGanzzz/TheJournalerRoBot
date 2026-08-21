@@ -1,10 +1,4 @@
-"""Trading Journal Bot + WebApp Server for Railway.
-
-Runs both the Telegram Bot and aiohttp Web Server in the same asyncio event loop.
-
-Usage:
-    python main.py
-"""
+"""Trading Journal Bot + WebApp Server for Railway."""
 
 from __future__ import annotations
 
@@ -24,11 +18,12 @@ logging.basicConfig(
 )
 log = logging.getLogger("tj")
 
+WEBAPP_DIR = Path(__file__).parent / "webapp"
+
 
 # =====================================================================
 # 1. WEB SERVER
 # =====================================================================
-
 
 async def api_stats(request: web.Request) -> web.Response:
     try:
@@ -134,16 +129,15 @@ def _list_all_trades(conn) -> list:
 
 
 async def serve_index(request: web.Request) -> web.Response:
-    """Serve index.html at root."""
-    index_path = Path(__file__).parent / "webapp" / "index.html"
-    if index_path.exists():
-        return web.FileResponse(index_path)
-    return web.Response(text="Trading Journal Bot", content_type="text/plain")
+    index = WEBAPP_DIR / "index.html"
+    if index.exists():
+        return web.FileResponse(index)
+    return web.Response(text="Not found", status=404)
 
 
-def create_web_app(webapp_dir: Path) -> web.Application:
+def create_web_app() -> web.Application:
     app = web.Application()
-    # API routes FIRST (higher priority)
+    # API routes
     app.router.add_get("/api/stats", api_stats)
     app.router.add_get("/stats.json", api_stats)
     app.router.add_get("/api/settings", api_settings)
@@ -151,13 +145,13 @@ def create_web_app(webapp_dir: Path) -> web.Application:
     app.router.add_get("/api/trades", api_trades)
     app.router.add_get("/trades.json", api_trades)
     app.router.add_get("/health", health)
-    # Root → serve index.html explicitly
+    # Root → index.html
     app.router.add_get("/", serve_index)
-    # Static files (CSS, JS, images)
-    if webapp_dir.exists():
-        app.router.add_static("/static", path=str(webapp_dir), show_index=False)
-        # Catch-all for other webapp paths (favicon, etc.)
-        app.router.add_static("/webapp", path=str(webapp_dir), show_index=False)
+    # Serve webapp files directly from root (not /static/)
+    if WEBAPP_DIR.exists():
+        for f in WEBAPP_DIR.iterdir():
+            if f.is_file():
+                app.router.add_get(f"/{f.name}", lambda req, fp=f: web.FileResponse(fp))
     return app
 
 
@@ -165,28 +159,26 @@ def create_web_app(webapp_dir: Path) -> web.Application:
 # 2. TELEGRAM BOT
 # =====================================================================
 
-
 def build_bot_application(token: str):
-    from telegram import Bot, MenuButtonWebApp, WebAppInfo
+    from telegram import MenuButtonWebApp, WebAppInfo
     from telegram.constants import ParseMode
     from telegram.ext import Application, Defaults
-    from httpx import AsyncHTTPTransport
     import handlers
     from config import load_settings
 
     async def post_init(application: Application) -> None:
         s = load_settings()
+        log.info("post_init: webapp_url=%s", s.webapp_url)
         if not s.webapp_url:
+            log.warning("webapp_url kosong — menu button TIDAK diaktifkan")
             return
         try:
             button = MenuButtonWebApp(text="📒 Journal", web_app=WebAppInfo(url=s.webapp_url))
             await application.bot.set_chat_menu_button(menu_button=button)
-            log.info("Menu WebApp diaktifkan: %s", s.webapp_url)
-        except Exception:
-            log.warning("Gagal mengeset chat menu button.")
+            log.info("✅ Menu WebApp diaktifkan: %s", s.webapp_url)
+        except Exception as e:
+            log.warning("Gagal set chat menu button: %s", e)
 
-    # Longer timeouts for Railway's potentially slow network
-    transport = AsyncHTTPTransport(retries=3)
     app = (
         Application.builder()
         .token(token)
@@ -200,13 +192,14 @@ def build_bot_application(token: str):
     )
     for handler in handlers.all_handlers():
         app.add_handler(handler)
+    from handlers.common import error_handler
+    app.add_error_handler(error_handler)
     return app
 
 
 # =====================================================================
 # 3. MAIN
 # =====================================================================
-
 
 async def _run_forever() -> None:
     import db
@@ -218,10 +211,9 @@ async def _run_forever() -> None:
     log.info("Port: %s", settings.port)
     log.info("Database: %s", "PostgreSQL" if db.USE_POSTGRES else "SQLite")
     log.info("Timezone: %s", settings.timezone)
-    log.info("WebApp URL: %s", settings.webapp_url or "(BELUM DISET — generate domain di Railway Settings → Networking)")
+    log.info("WebApp URL: %s", settings.webapp_url or "(BELUM DISET)")
     log.info("=" * 50)
 
-    # Init database
     try:
         db.init_db()
         log.info("Database initialized OK")
@@ -229,16 +221,15 @@ async def _run_forever() -> None:
         log.error("Database init FAILED: %s", e)
         sys.exit(1)
 
-    # Start web server FIRST (so health check passes)
-    webapp_dir = Path(__file__).parent / "webapp"
-    web_app = create_web_app(webapp_dir)
+    # Start web server FIRST
+    web_app = create_web_app()
     runner = web.AppRunner(web_app)
     await runner.setup()
     site = web.TCPSite(runner, host="0.0.0.0", port=settings.port)
     await site.start()
     log.info("HTTP server aktif di port %s", settings.port)
 
-    # Start Telegram bot (if token provided) — with retry
+    # Start Telegram bot with retry
     bot_app = None
     if settings.bot_token:
         for attempt in range(1, 4):
@@ -250,19 +241,17 @@ async def _run_forever() -> None:
                 await bot_app.updater.start_polling(
                     allowed_updates=["message", "callback_query"], poll_interval=1.0
                 )
-                log.info("Telegram bot aktif — siap menerima pesan.")
+                log.info("✅ Telegram bot aktif")
                 break
             except Exception as e:
                 log.warning("Attempt %d gagal: %s", attempt, e)
                 if attempt < 3:
-                    import asyncio as _aio
-                    await _aio.sleep(5 * attempt)
+                    await asyncio.sleep(5 * attempt)
                 else:
-                    log.error("Telegram bot gagal start setelah 3 attempts — web server tetap jalan.")
+                    log.error("Telegram bot gagal — web server tetap jalan.")
     else:
-        log.warning("BOT_TOKEN kosong — Telegram bot TIDAK aktif. Web server saja.")
+        log.warning("BOT_TOKEN kosong — Telegram bot TIDAK aktif.")
 
-    # Block until shutdown
     stop_event = asyncio.Event()
     try:
         await stop_event.wait()
