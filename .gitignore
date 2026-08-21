@@ -1,0 +1,12 @@
+# Python
+__pycache__/
+*.pyc
+
+# Lingkungan
+.env
+
+# Database lokal
+*.db
+
+# Chart sementara
+*.png
