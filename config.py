@@ -20,6 +20,7 @@ class Settings:
     """Semua pengaturan bot yang bisa dikonfigurasi via .env."""
 
     bot_token: str
+    port: int = 8080
     timezone: str = "Asia/Jakarta"
     default_balance: float = 1000.0
     default_risk_percent: float = 1.0
@@ -59,8 +60,17 @@ def _parse_ids(name: str) -> tuple[int, ...]:
 
 def load_settings() -> Settings:
     """Bangun Settings dari .env / environment variables."""
+    # Railway provides PORT env var
+    port = int(os.getenv("PORT", "8080"))
+
+    # Auto-detect WebApp URL from Railway domain
+    domain = os.getenv("RAILWAY_PUBLIC_DOMAIN", "").strip()
+    default_url = f"https://{domain}" if domain else ""
+    webapp_url = os.getenv("WEBAPP_URL", default_url).strip()
+
     return Settings(
         bot_token=os.getenv("BOT_TOKEN", "").strip(),
+        port=port,
         timezone=os.getenv("TIMEZONE", "Asia/Jakarta").strip() or "Asia/Jakarta",
         default_balance=_parse_float("DEFAULT_BALANCE", 1000.0),
         default_risk_percent=_parse_float("DEFAULT_RISK_PERCENT", 1.0),
@@ -68,7 +78,7 @@ def load_settings() -> Settings:
         daily_loss_r=_parse_float("DAILY_LOSS_R", -2.0),
         daily_loss_percent=_parse_float("DAILY_LOSS_PERCENT", -3.0),
         usdjpy_rate=_parse_float("USDJPY_RATE", 150.0),
-        webapp_url=os.getenv("WEBAPP_URL", "").strip(),
+        webapp_url=webapp_url,
         allowed_user_ids=_parse_ids("ALLOWED_USER_IDS"),
     )
 
